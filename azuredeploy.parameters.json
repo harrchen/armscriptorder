@@ -1,0 +1,28 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "numberOfVMs": {
+      "value": 3
+    },
+    "adminUsername": {
+      "value": "testsa"
+    },
+    "adminPassword": {
+      "value": "Test@qpq6n5xgujns"
+    },
+    "scriptStorageResourceGroup": {
+      "value": "yourscriptstorageresourcegroup"
+    },
+    "scriptStorageAccount": {
+      "value": "yourscriptstorageaccount"
+    },
+    "scriptUri": {
+      "value": "https://harrchenpublic.blob.core.windows.net/armscriptdependency/hello_world.sh"
+    },
+    "scriptCommand": {
+      "value": "sh hello_world.sh"
+    }
+  }
+  
+}

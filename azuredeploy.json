@@ -1,0 +1,223 @@
+﻿{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+  "parameters": {
+    "numberOfVMs": {
+      "type": "int",
+      "metadata": {
+        "description": "number of vms"
+      },
+      "maxValue": 5
+    },
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "User name for the Virtual Machine."
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for the Virtual Machine."
+      }
+    },
+    "scriptStorageResourceGroup": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group where script files resides"
+      }
+    },
+    "scriptStorageAccount": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account where script files resides"
+      }
+    },
+    "scriptUri": {
+      "type": "string",
+      "metadata": {
+        "description": "location of the bash script to be executed."
+      }
+    },
+    "scriptCommand": {
+      "type": "string",
+      "metadata": {
+        "description": "bash script command."
+      }
+    }
+  },
+  "variables": {
+    "vmApiVersion": "2016-03-30",
+    "networkApiVersion": "2016-03-30",
+    "storageApiVersion": "2015-06-15",
+    "namingfix": "[toLower(substring(uniqueString(resourceGroup().id), 0, 5))]",
+    "vnetName": "[concat('vnet', variables('namingfix'))]",
+    "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+    "storageAccount": "[tolower(concat( 'sa',variables('namingfix')))]",
+    "addressPrefix": "10.0.0.0/16",
+    "subnetName": "Subnet1",
+    "subnetPrefix": "10.0.0.0/24",
+    "subnetRef": "[concat(variables('vnetID'),'/subnets/',variables('subnetName'))]",
+    "storageAccountType": "Standard_LRS",
+    "vmSize": "Standard_DS2_v2",
+    "imageReference": {
+      "publisher": "Canonical",
+      "offer": "UbuntuServer",
+      "sku": "14.04.2-LTS",
+      "version": "latest"
+    },
+    "scriptstorageaccountid": "[concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/',parameters('scriptStorageResourceGroup'),'/providers/','Microsoft.Storage/storageAccounts/', parameters('scriptstorageAccount'))]",
+    "scriptDependencies": [
+      "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+      "[resourceId('Microsoft.Compute/virtualMachines/extensions', concat('vm',variables('namingfix'), '0'),'scriptext')]",
+      "[resourceId('Microsoft.Compute/virtualMachines/extensions', concat('vm',variables('namingfix'), '1'),'scriptext')]",
+      "[resourceId('Microsoft.Compute/virtualMachines/extensions', concat('vm',variables('namingfix'), '2'),'scriptext')]",
+      "[resourceId('Microsoft.Compute/virtualMachines/extensions', concat('vm',variables('namingfix'), '3'),'scriptext')]"
+    ]
+
+  },
+  "resources": [
+
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('storageAccount')]",
+      "apiVersion": "[variables('storageApiVersion')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "accountType": "[variables('storageAccountType')]"
+      }
+    },
+    {
+      "apiVersion": "[variables('networkApiVersion')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[variables('vnetName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('addressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('subnetPrefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "[variables('vmApiVersion')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat('nic',variables('namingfix'), copyindex())]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "name": "nicLoop",
+        "count": "[parameters('numberOfVMs')]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]"
+      ],
+      "tags": {
+        "displayName": "NICs"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfigdb",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+
+              "subnet": {
+                "id": "[variables('subnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "apiVersion": "[variables('vmApiVersion')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat('vm',variables('namingfix'),  copyIndex())]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "name": "vmLoop",
+        "count": "[parameters('numberOfVMs')]"
+      },
+      "tags": {
+        "displayName": "VM"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccount'))]",
+        "[concat('Microsoft.Network/networkInterfaces/','nic', variables('namingfix'), copyindex())]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('vmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat('vm',variables('namingfix'), copyIndex())]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": "[variables('imageReference')]",
+          "osDisk": {
+            "name": "osdisk",
+            "vhd": {
+              "uri": "[concat('http://',variables('storageAccount'),'.blob.core.windows.net/vhds/','osdisk', copyIndex(), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('nic',variables('namingfix'), copyindex()))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat('vm',variables('namingfix'),  copyIndex(), '/scriptext')]",
+      "apiVersion": "[variables('vmApiVersion')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "vmloop",
+        "[variables('scriptDependencies')[copyIndex()]]"
+      ],
+      "copy": {
+        "name": "dbscriptextensionLoop",
+        "count": "[parameters('numberOfVMs')]"
+      },
+      "tags": {
+        "displayName": "vmscriptext"
+      },
+      "properties": {
+        "publisher": "Microsoft.OSTCExtensions",
+        "type": "CustomScriptForLinux",
+        "typeHandlerVersion": "1.4",
+        "autoUpgradeMinorVersion": false,
+        "settings": {
+          "fileUris": [ "[parameters('scriptUri')]" ],
+          "commandToExecute": "[concat(parameters('scriptCommand'), ' ', copyindex())]"
+        },
+        "protectedSettings": {
+          "storageAccountName": "[parameters('scriptStorageAccount')]",
+          "storageAccountKey": "[listkeys(variables('scriptstorageaccountid'), variables('storageApiVersion')).key1]",
+          "storageAccountEndPoint": "https://core.windows.net"
+        }
+      }
+
+    }
+  ],
+    "outputs": {
+    }
+}
